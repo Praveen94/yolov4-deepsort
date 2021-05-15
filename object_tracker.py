@@ -23,6 +23,13 @@ from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
+from transform_functions import compute_perspective_transform,compute_point_perspective_transformation 
+from colors import bcolors
+import itertools
+import imutils
+import math
+import glob
+import yaml
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
 flags.DEFINE_string('weights', './checkpoints/yolov4-416',
                     'path to weights file')
@@ -38,7 +45,58 @@ flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 
+def get_centroids_and_groundpoints(array_boxes_detected):
+    	"""
+	For every bounding box, compute the centroid and the point located on the bottom center of the box
+	@ array_boxes_detected : list containing all our bounding boxes 
+	"""
+	array_centroids,array_groundpoints = [],[] # Initialize empty centroid and ground point lists 
+	for index,box in enumerate(array_boxes_detected):
+		# Draw the bounding box 
+		# c
+		# Get the both important points
+		centroid,ground_point = get_points_from_box(box)
+		array_centroids.append(centroid)
+		array_groundpoints.append(centroid)
+	return array_centroids, array_groundpoints
+    
+def get_points_from_box(box):
+    	"""
+	Get the center of the bounding and the point "on the ground"
+	@ param = box : 2 points representing the bounding box
+	@ return = centroid (x1,y1) and ground point (x2,y2)
+	"""
+	# Center of the box x = (x1+x2)/2 et y = (y1+y2)/2
+	center_x = int(((box[1]+box[3])/2))
+	center_y = int(((box[0]+box[2])/2))
+	# Coordiniate on the point at the bottom center of the box
+	center_y_ground = center_y + ((box[2] - box[0])/2)
+	return (center_x, center_y), (center_x, int(center_y_ground))
+
+
+
 def main(_argv):
+    
+    with open("./config_birdview.yml", "r") as ymlfile:
+        cfg = yaml.load(ymlfile)
+    
+    width_og, height_og = 0,0
+    corner_points = []
+    for section in cfg:
+        corner_points.append(cfg["image_parameters"]["p1"])
+        corner_points.append(cfg["image_parameters"]["p2"])
+        corner_points.append(cfg["image_parameters"]["p3"])
+        corner_points.append(cfg["image_parameters"]["p4"])
+        width_og = int(cfg["image_parameters"]["width_og"])
+        height_og = int(cfg["image_parameters"]["height_og"])
+        img_path = cfg["image_parameters"]["img_path"]
+        size_frame = cfg["image_parameters"]["size_frame"]
+    
+    matrix,imgOutput = compute_perspective_transform(corner_points,width_og,height_og,cv2.imread(img_path))
+    height,width,_ = imgOutput.shape
+    dim = (width, height)
+    
+    
     # Definition of the parameters
     max_cosine_distance = 0.4
     nn_budget = None
@@ -80,12 +138,15 @@ def main(_argv):
         vid = cv2.VideoCapture(video_path)
 
     out = None
+    output_video_1,output_video_2 = None,None
 
     # get video ready to save locally if flag is set
     if FLAGS.output:
         # by default VideoCapture returns float instead of int
+        """
         width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        """
         fps = int(vid.get(cv2.CAP_PROP_FPS))
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
@@ -93,6 +154,10 @@ def main(_argv):
     frame_num = 0
     # while video is running
     while True:
+        
+        black_img = cv2.imread("./black_bg.png")
+	    bird_view_img = cv2.resize(black_img, dim, interpolation = cv2.INTER_AREA)
+        
         return_value, frame = vid.read()
         if return_value:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -157,10 +222,10 @@ def main(_argv):
         class_names = utils.read_class_names(cfg.YOLO.CLASSES)
 
         # by default allow all classes in .names file
-        allowed_classes = list(class_names.values())
+#         allowed_classes = list(class_names.values())
         
         # custom allowed classes (uncomment line below to customize tracker for only people)
-        #allowed_classes = ['person']
+        allowed_classes = ['person']
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
         names = []
@@ -199,12 +264,14 @@ def main(_argv):
         # Call the tracker
         tracker.predict()
         tracker.update(detections)
-
+        
+        bbox_array = []
         # update tracks
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue 
             bbox = track.to_tlbr()
+            bbox_array.append((int(bbox[0]),int(bbox[1]),int(bbox[2]),int(bbox[3])))
             class_name = track.get_class()
             
         # draw bbox on screen
@@ -217,7 +284,16 @@ def main(_argv):
         # if enable info flag then print details about each track
             if FLAGS.info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
-
+        
+        array_centroids,array_groundpoints = get_centroids_and_groundpoints(bbox_array)
+        transformed_downoids = compute_point_perspective_transformation(matrix,array_centroids)
+        
+        # Show every point on the top view image 
+		for point in transformed_downoids:
+			x,y = point
+			cv2.circle(bird_view_img, (x,y), 60, (0,255,0), 2)
+			cv2.circle(bird_view_img, (x,y), 3, (0,255,0), -1)
+        
         # calculate frames per second of running detections
         fps = 1.0 / (time.time() - start_time)
         print("FPS: %.2f" % fps)
@@ -229,7 +305,15 @@ def main(_argv):
         
         # if output flag is set, save video file
         if FLAGS.output:
-            out.write(result)
+            if output_video_1 is None and output_video_2 is None:
+                fourcc1 = cv2.VideoWriter_fourcc(*"MJPG")
+                output_video_1 = cv2.VideoWriter("./video.avi", fourcc1, 25,(frame.shape[1], frame.shape[0]), True)
+                fourcc2 = cv2.VideoWriter_fourcc(*"MJPG")
+                output_video_2 = cv2.VideoWriter("./bird_view.avi", fourcc2, 25,(bird_view_img.shape[1], bird_view_img.shape[0]), True)
+                
+            elif output_video_1 is not None and output_video_2 is not None:
+                output_video_1.write(frame)
+                output_video_2.write(bird_view_img)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cv2.destroyAllWindows()
 

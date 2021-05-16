@@ -1,0 +1,24 @@
+image_parameters:
+  height_og: 1080
+  img_path: ./static_frame_from_video.jpg
+  l1:
+  - 91
+  - 1111
+  l2:
+  - 865
+  - 1137
+  p1:
+  - 13
+  - 1372
+  p2:
+  - 163
+  - 905
+  p3:
+  - 1049
+  - 1435
+  p4:
+  - 738
+  - 930
+  size_height: 1920
+  size_width: 1080
+  width_og: 1920

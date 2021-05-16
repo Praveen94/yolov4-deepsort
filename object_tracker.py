@@ -90,9 +90,26 @@ def main(_argv):
         width_og = int(bird_view_cfg["image_parameters"]["width_og"])
         height_og = int(bird_view_cfg["image_parameters"]["height_og"])
         img_path = bird_view_cfg["image_parameters"]["img_path"]
-        size_frame = bird_view_cfg["image_parameters"]["size_frame"]
+		size_height = bird_view_cfg["image_parameters"]["size_height"]
+		size_width = bird_view_cfg["image_parameters"]["size_width"]
     
-    matrix,imgOutput = compute_perspective_transform(corner_points,width_og,height_og,cv2.imread(img_path))
+    
+	tr = np.array([cfg["image_parameters"]["p4"][0],cfg["image_parameters"]["p4"][1]])
+    tl = np.array([cfg["image_parameters"]["p2"][0],cfg["image_parameters"]["p2"][1]])
+    br = np.array([cfg["image_parameters"]["p3"][0],cfg["image_parameters"]["p3"][1]])
+    bl = np.array([cfg["image_parameters"]["p1"][0],cfg["image_parameters"]["p1"][1]])
+    
+    widthA = np.sqrt(((br[0] - bl[0])** 2) + ((br[1] - bl[1])** 2))
+    widthB = np.sqrt(((tr[0] - tl[0])** 2) + ((tr[1] - tl[1])** 2))
+    maxWidth = max(int(widthA), int(widthB))
+    
+    
+
+    heightA = np.sqrt(((tr[0] - br[0])** 2) + ((tr[1] - br[1])** 2))
+    heightB = np.sqrt(((tl[0] - bl[0])** 2) + ((tl[1] - bl[1])** 2))
+    maxHeight = max(int(heightA), int(heightB))
+	
+	matrix,imgOutput = compute_perspective_transform(corner_points,maxWidth,height_og,cv2.imread(img_path))
     height,width,_ = imgOutput.shape
     dim = (width, height)
     
@@ -156,7 +173,7 @@ def main(_argv):
     while True:
         
         black_img = cv2.imread("./black_bg.png")
-        bird_view_img = cv2.resize(black_img, dim, interpolation=cv2.INTER_AREA)
+        black_img = cv2.resize(black_img, dim, interpolation=cv2.INTER_AREA)
         
         return_value, frame = vid.read()
         
@@ -293,8 +310,8 @@ def main(_argv):
           # Show every point on the top view image 
           for point in transformed_downoids:
               x, y = point
-              cv2.circle(bird_view_img, (x, y), 60, (0, 255, 0), 2)
-              cv2.circle(bird_view_img, (x,y), 3, (0,255,0), -1)
+              cv2.circle(black_img, (x, y), 60, (0, 255, 0), 2)
+              cv2.circle(black_img, (x,y), 3, (0,255,0), -1)
         
         # calculate frames per second of running detections
         fps = 1.0 / (time.time() - start_time)
@@ -311,11 +328,11 @@ def main(_argv):
                 fourcc1 = cv2.VideoWriter_fourcc(*"MJPG")
                 output_video_1 = cv2.VideoWriter("./video.avi", fourcc1, 25,(frame.shape[1], frame.shape[0]), True)
                 fourcc2 = cv2.VideoWriter_fourcc(*"MJPG")
-                output_video_2 = cv2.VideoWriter("./bird_view.avi", fourcc2, 25,(bird_view_img.shape[1], bird_view_img.shape[0]), True)
+                output_video_2 = cv2.VideoWriter("./bird_view.avi", fourcc2, 25,(black_img.shape[1], black_img.shape[0]), True)
                 
             elif output_video_1 is not None and output_video_2 is not None:
                 output_video_1.write(frame)
-                output_video_2.write(bird_view_img)
+                output_video_2.write(black_img)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cv2.destroyAllWindows()
 

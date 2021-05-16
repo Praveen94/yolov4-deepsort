@@ -46,51 +46,51 @@ flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
 
 def get_centroids_and_groundpoints(array_boxes_detected):
-    	"""
+    """
 	For every bounding box, compute the centroid and the point located on the bottom center of the box
 	@ array_boxes_detected : list containing all our bounding boxes 
 	"""
-	array_centroids,array_groundpoints = [],[] # Initialize empty centroid and ground point lists 
-	for index,box in enumerate(array_boxes_detected):
+    array_centroids, array_groundpoints = [], []  # Initialize empty centroid and ground point lists 
+    for index,box in enumerate(array_boxes_detected):
 		# Draw the bounding box 
 		# c
 		# Get the both important points
-		centroid,ground_point = get_points_from_box(box)
-		array_centroids.append(centroid)
-		array_groundpoints.append(centroid)
-	return array_centroids, array_groundpoints
+        centroid, ground_point = get_points_from_box(box)
+        array_centroids.append(centroid)
+        array_groundpoints.append(centroid)
+    return array_centroids, array_groundpoints
     
 def get_points_from_box(box):
-    	"""
+    """
 	Get the center of the bounding and the point "on the ground"
 	@ param = box : 2 points representing the bounding box
 	@ return = centroid (x1,y1) and ground point (x2,y2)
 	"""
 	# Center of the box x = (x1+x2)/2 et y = (y1+y2)/2
-	center_x = int(((box[1]+box[3])/2))
-	center_y = int(((box[0]+box[2])/2))
+    center_x = int(((box[1] + box[3]) / 2))
+    center_y = int(((box[0]+box[2])/2))
 	# Coordiniate on the point at the bottom center of the box
-	center_y_ground = center_y + ((box[2] - box[0])/2)
-	return (center_x, center_y), (center_x, int(center_y_ground))
+    center_y_ground = center_y + ((box[2] - box[0]) / 2)
+    return (center_x, center_y), (center_x, int(center_y_ground))
 
 
 
 def main(_argv):
     
     with open("./config_birdview.yml", "r") as ymlfile:
-        cfg = yaml.load(ymlfile)
+        bird_view_cfg = yaml.load(ymlfile)
     
     width_og, height_og = 0,0
     corner_points = []
-    for section in cfg:
-        corner_points.append(cfg["image_parameters"]["p1"])
-        corner_points.append(cfg["image_parameters"]["p2"])
-        corner_points.append(cfg["image_parameters"]["p3"])
-        corner_points.append(cfg["image_parameters"]["p4"])
-        width_og = int(cfg["image_parameters"]["width_og"])
-        height_og = int(cfg["image_parameters"]["height_og"])
-        img_path = cfg["image_parameters"]["img_path"]
-        size_frame = cfg["image_parameters"]["size_frame"]
+    for section in bird_view_cfg:
+        corner_points.append(bird_view_cfg["image_parameters"]["p1"])
+        corner_points.append(bird_view_cfg["image_parameters"]["p2"])
+        corner_points.append(bird_view_cfg["image_parameters"]["p3"])
+        corner_points.append(bird_view_cfg["image_parameters"]["p4"])
+        width_og = int(bird_view_cfg["image_parameters"]["width_og"])
+        height_og = int(bird_view_cfg["image_parameters"]["height_og"])
+        img_path = bird_view_cfg["image_parameters"]["img_path"]
+        size_frame = bird_view_cfg["image_parameters"]["size_frame"]
     
     matrix,imgOutput = compute_perspective_transform(corner_points,width_og,height_og,cv2.imread(img_path))
     height,width,_ = imgOutput.shape
@@ -156,9 +156,10 @@ def main(_argv):
     while True:
         
         black_img = cv2.imread("./black_bg.png")
-	    bird_view_img = cv2.resize(black_img, dim, interpolation = cv2.INTER_AREA)
+        bird_view_img = cv2.resize(black_img, dim, interpolation=cv2.INTER_AREA)
         
         return_value, frame = vid.read()
+        
         if return_value:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = Image.fromarray(frame)
@@ -269,7 +270,7 @@ def main(_argv):
         # update tracks
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
-                continue 
+                continue
             bbox = track.to_tlbr()
             bbox_array.append((int(bbox[0]),int(bbox[1]),int(bbox[2]),int(bbox[3])))
             class_name = track.get_class()
@@ -285,14 +286,15 @@ def main(_argv):
             if FLAGS.info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
         
-        array_centroids,array_groundpoints = get_centroids_and_groundpoints(bbox_array)
-        transformed_downoids = compute_point_perspective_transformation(matrix,array_centroids)
-        
-        # Show every point on the top view image 
-		for point in transformed_downoids:
-			x,y = point
-			cv2.circle(bird_view_img, (x,y), 60, (0,255,0), 2)
-			cv2.circle(bird_view_img, (x,y), 3, (0,255,0), -1)
+        if len(bbox_array) >= 1:
+          array_centroids,array_groundpoints = get_centroids_and_groundpoints(bbox_array)
+          transformed_downoids = compute_point_perspective_transformation(matrix,array_centroids)
+          
+          # Show every point on the top view image 
+          for point in transformed_downoids:
+              x, y = point
+              cv2.circle(bird_view_img, (x, y), 60, (0, 255, 0), 2)
+              cv2.circle(bird_view_img, (x,y), 3, (0,255,0), -1)
         
         # calculate frames per second of running detections
         fps = 1.0 / (time.time() - start_time)

@@ -317,7 +317,7 @@ def main(_argv):
         fps = 1.0 / (time.time() - start_time)
         print("FPS: %.2f" % fps)
         result = np.asarray(frame)
-        result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+#         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
         if not FLAGS.dont_show:
             cv2.imshow("Output Video", result)

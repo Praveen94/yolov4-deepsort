@@ -80,6 +80,7 @@ class Track:
         self._n_init = n_init
         self._max_age = max_age
         self.class_name = class_name
+        self.has_mask = None
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
